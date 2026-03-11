@@ -1,3 +1,5 @@
 langchain
 langchain-openai
+langchain-ollama
+langchain-chroma
 python-dotenv
