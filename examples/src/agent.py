@@ -10,7 +10,7 @@ MESSAGES_KEY = 'messages'
 
 class Agent():
     
-    def __init__(self, *args, tools : list | None = None, system_prompt : str | None = None, response_format : type[Model] | None = None, summarization_tokens : int = 5000, summarization_keep : int = 20, **kwargs):
+    def __init__(self, *args, tools : list | None = None, system_prompt : str | None = None, response_format : type[Model] | None = None, summarization_tokens : int = 4000, summarization_keep : int = 10, **kwargs):
         checkpointer = InMemorySaver()
         middleware = SummarizationMiddleware(
             model=llm,
