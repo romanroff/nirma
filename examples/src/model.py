@@ -28,13 +28,13 @@ class Model(ABC, BaseModel):
 
         return self
 
-    def __str__(self):
-        schema = self.model_json_schema()
-        data = self.model_dump()
-        return json.dumps({
-            'schema': schema,
-            'data': data
-        }, ensure_ascii=False, separators=(',', ':'))
+    # def __str__(self):
+    #     schema = self.model_json_schema()
+    #     data = self.model_dump_json()
+    #     return str({
+    #         'schema': schema,
+    #         'data': data
+    #     })
     
     def to(self, cls : type[BaseModel]):
         return cls(**self.model_dump())
