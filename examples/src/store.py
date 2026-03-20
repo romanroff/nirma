@@ -1,7 +1,9 @@
+from pathlib import Path
 from typing import Literal
 from langchain.tools import tool
 from langchain_community.vectorstores import InMemoryVectorStore
 from langchain_community.document_loaders import UnstructuredPDFLoader, UnstructuredWordDocumentLoader
+from langchain_core.documents import Document
 from langchain_classic.retrievers import MultiQueryRetriever, ContextualCompressionRetriever
 from langchain_classic.retrievers.document_compressors import LLMChainExtractor
 from .llms import llm, embedding
@@ -33,6 +35,8 @@ def _filter_metadata(docs):
 class Store():
 
     def __init__(self, path : str, mode : str='elements'):
+        self._path = path
+        self._document_name = Path(path).name
         
         if '.pdf' in path:
             Loader = UnstructuredPDFLoader
@@ -56,6 +60,58 @@ class Store():
         
         self._docs = docs
         self._store = InMemoryVectorStore.from_documents(docs, embedding=embedding)
+
+    def search(
+        self,
+        query : str,
+        search_type: Literal['similarity', 'mmr']='similarity',
+        k : int = 10,
+        filter : dict | None = None,
+        retriever : Literal['mq', 'cc', None] = None,
+    ) -> list[Document]:
+        base_retriever = self._store.as_retriever(
+            search_type=search_type,
+            search_kwargs={
+                'k': k,
+                'filter': self._get_filter(filter or {})
+            }
+        )
+        if retriever == 'mq':
+            final_retriever = MultiQueryRetriever.from_llm(
+                retriever=base_retriever,
+                llm=llm
+            )
+        elif retriever == 'cc':
+            final_retriever = ContextualCompressionRetriever(
+                base_retriever=base_retriever,
+                base_compressor=LLMChainExtractor.from_llm(llm)
+            )
+        else:
+            final_retriever = base_retriever
+
+        return final_retriever.invoke(query)
+
+    def _serialize_docs(self, docs : list[Document]) -> list[dict]:
+        results = []
+        for doc in docs:
+            metadata = dict(doc.metadata)
+            page_number = metadata.get('page_number')
+            chunk_index = metadata.get('chunk_index')
+            locator = self._document_name
+            if page_number is not None:
+                locator += f'#page={page_number}'
+            if chunk_index is not None:
+                locator += f'&chunk={chunk_index}'
+
+            results.append({
+                'type': 'document',
+                'title': self._document_name,
+                'locator': locator,
+                'snippet': doc.page_content[:500],
+                'metadata': metadata,
+                'content': doc.page_content,
+            })
+        return results
     
     def _get_filter(self, filter : dict):
 
@@ -114,33 +170,39 @@ class Store():
                         - Не нужно ни расширять запрос, ни сжимать результаты
             """
         
-            base_retriever = self._store.as_retriever(
+            docs = self.search(
+                query=query,
                 search_type=search_type,
-                search_kwargs={
-                    'k': k,
-                    'filter': self._get_filter(filter or {})
-                }
+                k=k,
+                filter=filter,
+                retriever=retriever,
             )
-            if retriever == 'mq':
-                final_retriever = MultiQueryRetriever.from_llm(
-                    retriever=base_retriever,
-                    llm=llm
-                )
-            elif retriever == 'cc':
-                final_retriever = ContextualCompressionRetriever(
-                    base_retriever=base_retriever,
-                    base_compressor=LLMChainExtractor.from_llm(llm)
-                )
-            else:
-                final_retriever = base_retriever
-
-            docs = final_retriever.invoke(query)
 
             return {
                 'results': docs 
             }
         
         return tool(search)
+
+    @property
+    def research_tool(self):
+
+        def document_search(query : str, search_type: Literal['similarity', 'mmr']='similarity', k : int = 10, filter : dict | None = None, retriever : Literal['mq', 'cc', None] = None) -> dict:
+            """
+            Search the current document store and return normalized serialized results.
+            """
+            docs = self.search(
+                query=query,
+                search_type=search_type,
+                k=k,
+                filter=filter,
+                retriever=retriever,
+            )
+            return {
+                'results': self._serialize_docs(docs)
+            }
+
+        return tool(document_search)
 
 __all__=[
     'Store'

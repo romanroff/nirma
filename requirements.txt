@@ -1,9 +1,12 @@
 python-dotenv
+pytest
 
 langchain
 langchain-openai
 langchain-ollama
 langchain-community
+ddgs
+wikipedia
 
 langchain-text-splitters
 # langchain-chroma
