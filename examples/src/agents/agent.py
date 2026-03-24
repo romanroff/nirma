@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain.agents.middleware import SummarizationMiddleware
 from langchain_core.messages import BaseMessage
@@ -19,7 +19,7 @@ class Agent():
         response_format : type[BaseModel] | None = None,
         checkpointer : InMemorySaver | None = None,
         summarization_tokens : int = 4000, 
-        summarization_keep : int = 10,
+        summarization_keep : int = 2,
         **kwargs
     ):
         self.id = id_ or get_id()
@@ -27,6 +27,11 @@ class Agent():
         self.tools = tools or []
         self.system_prompt = self._format_system_prompt(system_prompt)
         self.response_format = response_format
+        if response_format is not None: # FIXME CRITICAL
+            import langgraph.checkpoint.serde
+            langgraph.checkpoint.serde._msgpack.SAFE_MSGPACK_TYPES = (
+                langgraph.checkpoint.serde._msgpack.SAFE_MSGPACK_TYPES.union({(response_format.__module__, response_format.__name__)})
+            )
         self.checkpointer = checkpointer or InMemorySaver()
 
         summarization_middleware = SummarizationMiddleware(
@@ -76,6 +81,12 @@ class Agent():
         return {
             'id': self.id
         }
+    
+    @property
+    def messages(self) -> list:
+        thread_id = self.id
+        thread = self.checkpointer.get({"configurable": {"thread_id": thread_id}})
+        return thread['channel_values']['messages']
     
 __all__=[
     'Agent'

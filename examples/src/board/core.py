@@ -1,17 +1,20 @@
 from pydantic import BaseModel, Field
+from langchain.tools import tool
 from .note import BaseNote, Note
 
 class Board(BaseModel):
     question : str = Field(description='Вопрос пользователя')
     notes : list[BaseNote] = Field(default=[], description='Список записей')
 
-    def get_board_notes(self, last_n : int | None = None) -> list[dict]:
+    def get_notes(self, last_n : int | None = None) -> list[dict]:
         """
         Возвращает список актуальных записей на доске с краткой информацией.
         Если передан last_n, вернет последние last_n записей.
         """
         notes = [{
             'id': note.id,
+            'author_id': note.author_id,
+            'author_role': note.author_role,
             'summary': note.summary,
             'keywords': note.keywords
         } for note in self.notes]
@@ -19,7 +22,7 @@ class Board(BaseModel):
             notes = notes[-last_n:]
         return notes
     
-    def get_board_note(self, note_id : str) -> Note | None:
+    def get_note(self, note_id : str) -> Note | None:
         """
         Возвращает запись с указанным id.
         Возвращает None, если запись не найдена.
@@ -58,6 +61,13 @@ class Board(BaseModel):
                 border_style=color,
                 width=width
             ))
+
+    @property
+    def tools(self):
+        return [
+            tool(self.get_notes),
+            tool(self.get_note)
+        ]
 
 __all__=[
     'Board'

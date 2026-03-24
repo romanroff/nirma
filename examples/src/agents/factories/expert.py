@@ -18,10 +18,7 @@ def create_expert_agent(role : Role, board : Board):
     agent = RoleAgent(
         role=role,
         system_prompt=system_prompt,
-        tools=[
-            tool(board.get_board_notes),
-            tool(board.get_board_note)  
-        ],
+        tools=board.tools,
         response_format=BaseNote,
     )
     return agent

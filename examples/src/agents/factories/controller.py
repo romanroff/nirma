@@ -23,9 +23,6 @@ def create_controller_agent(role_agents : list[RoleAgent], board : Board):
     )
     return Agent(
         system_prompt=system_prompt,
-        tools=[
-            tool(board.get_board_notes),
-            tool(board.get_board_note)  
-        ],
+        tools=board.tools,
         response_format=ControllerResponse,
     )

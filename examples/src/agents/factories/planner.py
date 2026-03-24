@@ -22,10 +22,7 @@ def create_planner_agent(board : Board):
     agent = RoleAgent(
         role=_role,
         system_prompt=system_prompt,
-        tools=[
-            tool(board.get_board_notes),
-            tool(board.get_board_note)  
-        ],
+        tools=board.tools,
         response_format=BaseNote,
     )
     return agent

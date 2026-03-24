@@ -5,6 +5,7 @@ from .decider import create_decider_agent
 from .expert import create_expert_agent
 from .generator import create_generator_agent
 from .planner import create_planner_agent
+from .wikipedia import create_wikipedia_agent
 
 __all__=[
     'create_cleaner_agent',
@@ -13,5 +14,6 @@ __all__=[
     'create_decider_agent',
     'create_expert_agent',
     'create_generator_agent',
-    'create_planner_agent'
+    'create_planner_agent',
+    'create_wikipedia_agent',
 ]
