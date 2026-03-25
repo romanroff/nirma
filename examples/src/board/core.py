@@ -1,137 +1,74 @@
+from pydantic import BaseModel, Field
 from langchain.tools import tool
-from typing import Callable
-from pydantic import Field
-from ..model import Model
-from .models import *
-from .utils import *
+from .note import BaseNote, Note
 
-TOOLS = {
-    'add_tasks',
-    'get_task',
-    'get_tasks',
-    'update_status',
-    'update_priority',
-    'add_result',
-    'get_results'
-}
+class Board(BaseModel):
+    question : str = Field(description='Вопрос пользователя')
+    notes : list[BaseNote] = Field(default=[], description='Список записей')
 
-class Board(Model):
-    iteration : int = Field(default=0)
-    tasks : list[Task] = Field(default=[])
-    results : list[Result] = Field(default=[])
+    def get_notes(self, last_n : int | None = None) -> list[dict]:
+        """
+        Возвращает список актуальных записей на доске с краткой информацией.
+        Если передан last_n, вернет последние last_n записей.
+        """
+        notes = [{
+            'id': note.id,
+            'author_id': note.author_id,
+            'author_role': note.author_role,
+            'summary': note.summary,
+            'keywords': note.keywords
+        } for note in self.notes]
+        if last_n is not None:
+            notes = notes[-last_n:]
+        return notes
     
+    def get_note(self, note_id : str) -> Note | None:
+        """
+        Возвращает запись с указанным id.
+        Возвращает None, если запись не найдена.
+        """
+        notes = [n for n in self.notes if n.id == note_id]
+        if len(notes) == 0:
+            return None
+        return notes[0]
+    
+    def add_note(self, note : BaseNote, author_id : str, author_role : str) -> str:
+        """
+        Добавляет запись на доску.
+        Возвращает id записи.
+        """
+        note = Note(author_id=author_id, author_role=author_role, **note.model_dump())
+        self.notes.append(note)
+        return note.id
+    
+    def remove_note(self, note_id : str):
+        self.notes = [n for n in self.notes if n.id != note_id]
+
+    def remove_notes(self, notes_ids : list[str]):
+        self.notes = [n for n in self.notes if n.id not in notes_ids]
+
+    def print(self, color = 'yellow', width : int = 100):
+        from rich import print
+        from rich.panel import Panel
+
+        for note in self.notes:
+            panel_title = f"📌 {note.author_role} [{note.author_id}]"
+            panel_content = '\n\n---\n\n'.join([note.summary, note.content, str.join(', ', note.keywords)])
+            
+            print(Panel(
+                panel_content,
+                title=panel_title,
+                border_style=color,
+                width=width
+            ))
+
     @property
-    def tools(self) -> list[Callable]:
-        return [tool(getattr(self, name)) for name in TOOLS]
+    def tools(self):
+        return [
+            tool(self.get_notes),
+            tool(self.get_note)
+        ]
 
-    def update_iteration(self) -> int:
-        iteration = self.iteration + 1
-        self.iteration = iteration
-        return iteration
-    
-    #########
-    # TASKS #
-    #########
-
-    def add_tasks(self, tasks : list[BaseTask]) -> list[str]:
-        """
-        Добавляет перечень задач на доску задач
-        Возвращает список ID задач в порядке добавления.
-        """
-        with lock:
-            tasks = [Task(
-                id=get_id(),
-                created_at=self.iteration,
-                **task.model_dump()
-            ) for task in tasks]
-            self.tasks = tasks
-            return [t.id for t in self.tasks]
-    
-    def get_task(self, task_id : str) -> Task | None:
-        """
-        Возвращает задачу по ID.
-        Возвращает None, если задача не найдена.
-        """
-        tasks = list(filter(lambda t : t.id == task_id, self.tasks))
-        if len(tasks) == 0:
-            return None
-        return tasks[0]
-    
-    def get_tasks(self, status : Status | None = None, priority : Priority = Priority.TRIVIAL) -> list[Task]:
-        """
-        Возвращает перечень доступных задач с фильтром:
-        - status : Status | None - только заданный статус (если None, фильтр не применяется). По умолчанию None.
-        - priority : Priority - заданный приоритет и выше (по умолчанию Priority.TRIVIAL) 
-        Если фильтр не указан, вернется весь перечень задач.
-        """
-        tasks = self.tasks
-        if status is not None:
-            tasks = [t.status == status for t in tasks]
-        return [t for t in tasks if t.priority >= priority]
-    
-    def update_status(self, task_id : str, status : Status) -> Task | None:
-        """
-        Обновляет текущий статус задачи.
-        Возвращает None, если задача с таким ID не найдена.
-        Возвращает текущее состояние задачи.
-        ВНИМАНИЕ: сверяйте желаемое и текущее состояние задачи.
-        """
-        task = self.get_task(task_id)
-        if task is None:
-            return None
-        status_before = task.status
-        with lock:
-            status_after = task.status
-            if status_before == status_after:
-                task.status = status
-            return task
-
-    def update_priority(self, task_id : str, priority : Priority) -> Task | None:             
-        """
-        Обновляет текущий приоритет задачи.
-        Возвращает None, если задача с таким ID не найдена.
-        Возвращает текущее состояние задачи.
-        ВНИМАНИЕ: сверяйте желаемое и текущее состояние задачи.
-        """
-        task = self.get_task(task_id)
-        if task is None:
-            return None
-        priority_before = task.priority
-        with lock:
-            priority_after = task.priority
-            if priority_before == priority_after:
-                task.priority = priority
-            return task
-        
-    ###########
-    # RESULTS #
-    ###########
-    
-    def add_result(self, task_id : str, result : BaseResult) -> Result | None:
-        """
-        Добавляет результат к задаче. 
-        Возвращает None, если задача с таким ID не найдена.
-        """
-        task = self.get_task(task_id)
-        if task is None:
-            return None
-        
-        with lock:
-            result = Result(
-                task_id=task.id,
-                created_at=self.iteration,
-                **result.model_dump()
-            )
-            self.results.append(result)
-            return result
-        
-    def get_results(self, task_id : str) -> list[Result] | None:
-        """
-        Возвращает результаты, относящиеся к задаче. 
-        Возвращает None, если задача с таким ID не найдена.
-        """               
-        task = self.get_task(task_id)
-        if task is None:
-            return None
-        results = [c for c in self.results if c.task_id == task.id]
-        return results
+__all__=[
+    'Board'
+]

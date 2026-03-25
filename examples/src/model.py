@@ -1,17 +1,17 @@
-from pydantic import BaseModel, model_validator
 from abc import ABC
-import json
+
+from pydantic import BaseModel, model_validator
+
 
 class Model(ABC, BaseModel):
 
-    @model_validator(mode='after')
-    def _process_strings(self) -> 'Model':
-
-        def _process_value(value : str) -> str:
+    @model_validator(mode="after")
+    def _process_strings(self) -> "Model":
+        def _process_value(value: str) -> str:
             if isinstance(value, str):
-                value = value.replace('\u202f', ' ')
+                value = value.replace("\u202f", " ")
             return value
-        
+
         attributes = self.model_dump().keys()
 
         for attr in attributes:
@@ -19,7 +19,7 @@ class Model(ABC, BaseModel):
             if isinstance(value, list):
                 new_value = [_process_value(v) for v in value]
             elif isinstance(value, dict):
-                new_value = {k:_process_value(v) for k,v in value.items()}
+                new_value = {k: _process_value(v) for k, v in value.items()}
             elif isinstance(value, set):
                 new_value = {_process_value(v) for v in value}
             else:
@@ -28,17 +28,10 @@ class Model(ABC, BaseModel):
 
         return self
 
-    # def __str__(self):
-    #     schema = self.model_json_schema()
-    #     data = self.model_dump_json()
-    #     return str({
-    #         'schema': schema,
-    #         'data': data
-    #     })
-    
-    def to(self, cls : type[BaseModel]):
+    def to(self, cls: type[BaseModel]):
         return cls(**self.model_dump())
-    
-__all__=[
-    'Model'
+
+
+__all__ = [
+    "Model",
 ]
