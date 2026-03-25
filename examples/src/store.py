@@ -36,11 +36,13 @@ class Store():
 
     def __init__(self, path : str, mode : str='elements'):
         self._path = path
-        self._document_name = Path(path).name
+        document_path = Path(path)
+        self._document_name = document_path.name
+        suffix = document_path.suffix.lower()
         
-        if '.pdf' in path:
+        if suffix == '.pdf':
             Loader = UnstructuredPDFLoader
-        elif '.docx' in path:
+        elif suffix == '.docx':
             Loader = UnstructuredWordDocumentLoader
         else:
             raise ValueError('Формат файла не поддерживается')

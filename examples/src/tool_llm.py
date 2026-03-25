@@ -13,6 +13,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import Field
 
 from langchain_community.adapters.openai import convert_dict_to_message
+from . import trace_log
 
 
 class RequestsToolChatModel(BaseChatModel):
@@ -58,21 +59,52 @@ class RequestsToolChatModel(BaseChatModel):
         if "parallel_tool_calls" in kwargs and kwargs["parallel_tool_calls"] is not None:
             payload["parallel_tool_calls"] = kwargs["parallel_tool_calls"]
 
-        response = requests.post(
-            f"{self.base_url.rstrip('/')}/v1/chat/completions",
-            json=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-            },
-            timeout=self.timeout,
+        trace_log.log_event(
+            "http_chat_request",
+            client=self._llm_type,
+            model=self.model,
+            url=f"{self.base_url.rstrip('/')}/v1/chat/completions",
+            payload=payload,
         )
+
+        try:
+            response = requests.post(
+                f"{self.base_url.rstrip('/')}/v1/chat/completions",
+                json=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.api_key}",
+                },
+                timeout=self.timeout,
+            )
+        except Exception as exc:
+            trace_log.log_event(
+                "http_chat_transport_error",
+                client=self._llm_type,
+                model=self.model,
+                error=exc,
+            )
+            raise
         if response.status_code >= 400:
             body = response.text.strip()
+            trace_log.log_event(
+                "http_chat_http_error",
+                client=self._llm_type,
+                model=self.model,
+                status_code=response.status_code,
+                response_text=body,
+            )
             message = body[:500] if body else f"HTTP {response.status_code}"
             raise RuntimeError(message)
 
         data = response.json()
+        trace_log.log_event(
+            "http_chat_response",
+            client=self._llm_type,
+            model=self.model,
+            status_code=response.status_code,
+            response=data,
+        )
         choice = data["choices"][0]
         message = convert_dict_to_message(choice["message"])
 

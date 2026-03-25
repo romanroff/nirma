@@ -14,6 +14,7 @@ from pydantic import Field
 
 from ..llms import agent_llm
 from ..model import Model
+from .. import trace_log
 
 AgentTaskKind = Literal["web_research", "document_research"]
 AgentStatus = Literal["success", "partial", "failed"]
@@ -130,21 +131,54 @@ class CreateAgentWorker(TaskAgentRuntime):
                 f"{self.name} does not support task kind '{task.kind}'."
             )
 
+        trace_log.log_event(
+            "task_worker_start",
+            worker_name=self.name,
+            task=task,
+            tools=[getattr(tool, "name", repr(tool)) for tool in self.tools],
+        )
         try:
             raw_result = self._agent.invoke(
                 input={"messages": [HumanMessage(self._format_task(task))]},
                 config={"configurable": {"thread_id": task.task_id}},
             )
+            trace_log.log_event(
+                "task_worker_raw_response",
+                worker_name=self.name,
+                task_id=task.task_id,
+                raw_response=raw_result,
+            )
             structured = raw_result.get("structured_response")
             if structured is None:
                 response = self._parse_worker_response(raw_result)
-                return self._build_result(task, response)
+                result = self._build_result(task, response)
+                trace_log.log_event(
+                    "task_worker_result",
+                    worker_name=self.name,
+                    task_id=task.task_id,
+                    result=result,
+                )
+                return result
 
             response = WorkerResponse.model_validate(structured)
-            return self._build_result(task, response)
+            result = self._build_result(task, response)
+            trace_log.log_event(
+                "task_worker_result",
+                worker_name=self.name,
+                task_id=task.task_id,
+                result=result,
+            )
+            return result
         except Exception as exc:
             error_message = str(exc).strip() or type(exc).__name__
-            return AgentResult(
+            trace_log.log_event(
+                "task_worker_error",
+                worker_name=self.name,
+                task_id=task.task_id,
+                task=task,
+                error=exc,
+            )
+            result = AgentResult(
                 task_id=task.task_id,
                 agent_name=self.name,
                 status="failed",
@@ -153,6 +187,13 @@ class CreateAgentWorker(TaskAgentRuntime):
                 artifacts={},
                 error=error_message,
             )
+            trace_log.log_event(
+                "task_worker_result",
+                worker_name=self.name,
+                task_id=task.task_id,
+                result=result,
+            )
+            return result
 
     def _build_result(self, task: AgentTask, response: WorkerResponse) -> AgentResult:
         status = response.status
@@ -192,8 +233,23 @@ class CreateAgentWorker(TaskAgentRuntime):
         if not isinstance(content, str) or not content.strip():
             raise ValueError("Agent returned an empty final message.")
 
-        parsed = self._extract_json_object(content)
-        return WorkerResponse.model_validate_json(parsed)
+        try:
+            parsed = self._extract_json_object(content)
+            return WorkerResponse.model_validate_json(parsed)
+        except Exception:
+            return self._salvage_plain_text_response(content)
+
+    def _salvage_plain_text_response(self, content: str) -> WorkerResponse:
+        summary = re.sub(r"\s+", " ", content).strip()
+        if not summary:
+            raise ValueError("Agent returned an empty final message.")
+        if len(summary) > 900:
+            summary = summary[:897].rstrip() + "..."
+        return WorkerResponse(
+            status="partial",
+            summary=summary,
+            sources=[],
+        )
 
     def _extract_json_object(self, content: str) -> str:
         cleaned = content.strip()
@@ -220,6 +276,8 @@ class CreateAgentWorker(TaskAgentRuntime):
         }
         return (
             "Complete the task using only your available tools. "
+            "Never ask the user for clarification or a narrower question. "
+            "If the task is broad, make reasonable assumptions and extract the most relevant evidence. "
             "Return only valid JSON with this shape and no markdown fences:\n"
             "{"
             "\"status\":\"success|partial|failed\","

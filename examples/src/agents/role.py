@@ -14,7 +14,8 @@ class RoleAgent(Agent):
     def _format_system_prompt(self, system_prompt):
         if system_prompt is None:
             return system_prompt
-        return system_prompt.format(**self.info)
+        formatted_prompt = system_prompt.format(**self.info)
+        return super()._format_system_prompt(formatted_prompt)
 
     @property
     def info(self):

@@ -361,7 +361,10 @@ class WebResearchAgent(CreateAgentWorker):
         return not any(source.type == "wikipedia" for source in result.sources)
 
     def _manual_research(self, task: AgentTask) -> WorkerResponse | None:
-        plan = self._build_manual_search_plan(task)
+        try:
+            plan = self._build_manual_search_plan(task)
+        except Exception:
+            return None
         sources: list[AgentSource] = []
 
         wikipedia_query = str(plan.get("wikipedia_query", "")).strip()
@@ -377,9 +380,17 @@ class WebResearchAgent(CreateAgentWorker):
         if not sources:
             return None
 
+        try:
+            summary = self._compose_summary(task, sources)
+        except Exception:
+            summary = (
+                "Собраны внешние источники по запросу. Ответ носит предварительный "
+                "характер и опирается на найденные материалы."
+            )
+
         return WorkerResponse(
             status=self._source_status(sources),
-            summary=self._compose_summary(task, sources),
+            summary=summary,
             sources=sources,
         )
 
@@ -406,7 +417,7 @@ class WebResearchAgent(CreateAgentWorker):
             "Do not add explanations.\n\n"
             f"Text:\n{focus_fragment or query}"
         )
-        response = llm.invoke(prompt)
+        response = self._model.invoke(prompt)
         content = response.content
         if isinstance(content, list):
             content = "\n".join(
@@ -455,7 +466,7 @@ class WebResearchAgent(CreateAgentWorker):
             f"Task:\n{task.query}\n\n"
             f"Sources:\n{json.dumps([source.model_dump(mode='json') for source in sources], ensure_ascii=False, indent=2)}"
         )
-        response = llm.invoke(prompt)
+        response = self._model.invoke(prompt)
         content = response.content
         if isinstance(content, list):
             content = "\n".join(

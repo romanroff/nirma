@@ -47,16 +47,30 @@ class Board(BaseModel):
     def remove_notes(self, notes_ids : list[str]):
         self.notes = [n for n in self.notes if n.id not in notes_ids]
 
+    def _build_panel_content(self, note: Note):
+        from rich.console import Group
+        from rich.markdown import Markdown
+        from rich.rule import Rule
+        from rich.text import Text
+
+        keywords = ', '.join(note.keywords)
+        return Group(
+            Markdown(note.summary),
+            Rule(style='dim'),
+            Markdown(note.content),
+            Rule(style='dim'),
+            Text(f'keywords: {keywords}', style='cyan'),
+        )
+
     def print(self, color = 'yellow', width : int = 100):
         from rich import print
         from rich.panel import Panel
 
         for note in self.notes:
             panel_title = f"📌 {note.author_role} [{note.author_id}]"
-            panel_content = '\n\n---\n\n'.join([note.summary, note.content, str.join(', ', note.keywords)])
             
             print(Panel(
-                panel_content,
+                self._build_panel_content(note),
                 title=panel_title,
                 border_style=color,
                 width=width

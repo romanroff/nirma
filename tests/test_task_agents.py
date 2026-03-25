@@ -190,3 +190,32 @@ def test_execute_returns_failed_result_on_runtime_error():
 
     assert result.status == "failed"
     assert result.error == "boom"
+
+
+def test_execute_salvages_plain_text_response_as_partial():
+    worker = DocumentResearchAgent(
+        model=FakeChatModel(),
+        tool=fake_document_search,
+    )
+    task = AgentTask(
+        kind="document_research",
+        query="Find priorities in the local plan.",
+    )
+
+    worker._agent.invoke = lambda *args, **kwargs: {
+        "messages": [
+            AIMessage(
+                content=(
+                    "I’m ready to help with your document-based research request. "
+                    "Please provide the specific question or information you need."
+                )
+            )
+        ]
+    }
+
+    result = worker.execute(task)
+
+    assert result.status == "partial"
+    assert "document-based research request" in result.summary
+    assert result.sources == []
+    assert result.error is None

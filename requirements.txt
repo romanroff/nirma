@@ -1,11 +1,18 @@
 python-dotenv
 
 langchain
+langchain-classic
+langgraph
 langchain-openai
 langchain-ollama
 langchain-community
 
 langchain-text-splitters
+ipykernel
+ipywidgets
+requests
+rich
+tqdm
 unstructured[docx,pdf] # for documents parsing
 ddgs # for duckduckgo web search
 wikipedia # for wikipedia web search

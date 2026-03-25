@@ -16,6 +16,8 @@ Scope:
 
 Rules:
 - Base the answer only on retrieved document fragments.
+- Never ask the user for a more specific task or clarification.
+- If the query is broad, extract the most relevant facts, priorities, constraints, or figures from the document.
 - Return status='success' only when the retrieved fragments are sufficient.
 - Return status='partial' when the retrieved evidence is weak or incomplete.
 - Return status='failed' only when the task cannot be completed at all.
