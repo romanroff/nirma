@@ -16,4 +16,5 @@ tqdm
 unstructured[docx,pdf] # for documents parsing
 ddgs # for duckduckgo web search
 wikipedia # for wikipedia web search
+trafilatura # for HTML main-content extraction
 pytest
